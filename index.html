@@ -164,6 +164,25 @@
             background-color: #f8fafc; /* Papier-Hintergrund für Kontrast */
         }
 
+        /* Stempel-Typ-Auswahl */
+        .stamp-type-option {
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            background: rgba(255, 255, 255, 0.04);
+        }
+        .stamp-type-option:hover {
+            border-color: rgba(96, 165, 250, 0.45);
+            background: rgba(59, 130, 246, 0.08);
+        }
+        .stamp-type-option.selected {
+            border-color: rgba(96, 165, 250, 0.75);
+            background: rgba(59, 130, 246, 0.14);
+        }
+        .stamp-type-option input[type="radio"] {
+            accent-color: #60a5fa;
+        }
+
         /* Fade-in Animation */
         @keyframes fadeInUp {
             from { opacity: 0; transform: translateY(20px); }
@@ -277,6 +296,31 @@
                             <input type="file" id="fileInput" accept=".pdf,application/pdf" class="hidden">
                         </div>
 
+                        <!-- Stempel-Typ Auswahl -->
+                        <div class="glass-card rounded-2xl p-6 fade-in-up fade-in-up-delay-2">
+                            <label class="block text-sm font-semibold text-blue-200/80 mb-3 uppercase tracking-wider">
+                                Stempel-Typ
+                            </label>
+                            <div class="flex flex-col gap-3" id="stampTypeGroup">
+                                <!-- Option 1: GEPRÜFT -->
+                                <label class="stamp-type-option selected rounded-xl px-4 py-3 flex items-center gap-3" id="labelStampGepr">
+                                    <input type="radio" name="stampType" id="stampTypeGepr" value="geprueft" checked class="w-4 h-4 flex-shrink-0">
+                                    <div>
+                                        <p class="text-sm font-bold text-white/90 tracking-wide">GEPRÜFT</p>
+                                        <p class="text-xs text-white/40 mt-0.5">Klassischer Prüfstempel (1 Zeile)</p>
+                                    </div>
+                                </label>
+                                <!-- Option 2: durch Gegenrechnung Geprüft -->
+                                <label class="stamp-type-option rounded-xl px-4 py-3 flex items-center gap-3" id="labelStampGegen">
+                                    <input type="radio" name="stampType" id="stampTypeGegen" value="gegenrechnung" class="w-4 h-4 flex-shrink-0">
+                                    <div>
+                                        <p class="text-sm font-bold text-white/90 leading-tight">durch Gegenrechnung<br>Geprüft</p>
+                                        <p class="text-xs text-white/40 mt-0.5">Stempel für Gegenrechnungsprüfung (2 Zeilen)</p>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
                         <!-- Konfiguration: Prüfer & Datum -->
                         <div class="glass-card rounded-2xl p-6 fade-in-up fade-in-up-delay-2">
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
@@ -343,11 +387,20 @@
                                 Stempel-Vorschau
                             </label>
                             <div class="flex justify-center">
-                                <div class="stamp-preview rounded-md px-5 py-4 text-center min-w-[180px]">
+                                <!-- Vorschau: GEPRÜFT -->
+                                <div id="previewGepr" class="stamp-preview rounded-md px-5 py-4 text-center min-w-[180px]">
                                     <p class="text-base font-extrabold tracking-widest leading-tight">GEPRÜFT</p>
                                     <hr class="border-green-800/40 my-1.5">
                                     <p id="previewName" class="text-sm font-bold leading-tight">Max Mustermann</p>
                                     <p id="previewDate" class="text-xs font-semibold mt-0.5 leading-tight"></p>
+                                </div>
+                                <!-- Vorschau: durch Gegenrechnung Geprüft -->
+                                <div id="previewGegen" class="stamp-preview rounded-md px-5 py-4 text-center min-w-[180px] hidden">
+                                    <p class="text-sm font-extrabold tracking-widest leading-tight">durch Gegenrechnung</p>
+                                    <p class="text-sm font-extrabold tracking-widest leading-tight">Geprüft</p>
+                                    <hr class="border-green-800/40 my-1.5">
+                                    <p id="previewNameGegen" class="text-sm font-bold leading-tight">Max Mustermann</p>
+                                    <p id="previewDateGegen" class="text-xs font-semibold mt-0.5 leading-tight"></p>
                                 </div>
                             </div>
                             <p class="text-xs text-white/30 text-center mt-4">Platzierung: unten rechts auf jeder Seite</p>
@@ -411,24 +464,51 @@
         // ============================================================
         // DOM-Elemente
         // ============================================================
-        const dropZone       = document.getElementById('dropZone');
+        const dropZone        = document.getElementById('dropZone');
         const dropZoneDefault = document.getElementById('dropZoneDefault');
-        const dropZoneFile   = document.getElementById('dropZoneFile');
-        const fileInput      = document.getElementById('fileInput');
-        const fileNameEl     = document.getElementById('fileName');
-        const fileSizeEl     = document.getElementById('fileSize');
-        const prueferInput   = document.getElementById('pruefer');
-        const datumInput     = document.getElementById('datum');
-        const skipPagesInput = document.getElementById('skipPages');
-        const stampBtn       = document.getElementById('stampBtn');
+        const dropZoneFile    = document.getElementById('dropZoneFile');
+        const fileInput       = document.getElementById('fileInput');
+        const fileNameEl      = document.getElementById('fileName');
+        const fileSizeEl      = document.getElementById('fileSize');
+        const prueferInput    = document.getElementById('pruefer');
+        const datumInput      = document.getElementById('datum');
+        const skipPagesInput  = document.getElementById('skipPages');
+        const stampBtn        = document.getElementById('stampBtn');
         const progressContainer = document.getElementById('progressContainer');
-        const progressBar    = document.getElementById('progressBar');
-        const progressText   = document.getElementById('progressText');
-        const previewName    = document.getElementById('previewName');
-        const previewDate    = document.getElementById('previewDate');
+        const progressBar     = document.getElementById('progressBar');
+        const progressText    = document.getElementById('progressText');
+        const previewName     = document.getElementById('previewName');
+        const previewDate     = document.getElementById('previewDate');
+        const previewNameGegen = document.getElementById('previewNameGegen');
+        const previewDateGegen = document.getElementById('previewDateGegen');
+        const previewGepr     = document.getElementById('previewGepr');
+        const previewGegen    = document.getElementById('previewGegen');
+        const stampTypeGepr   = document.getElementById('stampTypeGepr');
+        const stampTypeGegen  = document.getElementById('stampTypeGegen');
+        const labelStampGepr  = document.getElementById('labelStampGepr');
+        const labelStampGegen = document.getElementById('labelStampGegen');
 
         // Aktuell geladene Datei
         let currentFile = null;
+
+        // ============================================================
+        // Stempel-Typ Auswahl – Vorschau umschalten
+        // ============================================================
+        function updateStampTypeUI() {
+            const isGegen = stampTypeGegen.checked;
+            previewGepr.classList.toggle('hidden', isGegen);
+            previewGegen.classList.toggle('hidden', !isGegen);
+            labelStampGepr.classList.toggle('selected', !isGegen);
+            labelStampGegen.classList.toggle('selected', isGegen);
+        }
+
+        stampTypeGepr.addEventListener('change', updateStampTypeUI);
+        stampTypeGegen.addEventListener('change', updateStampTypeUI);
+
+        // Helper: aktuell gewählter Stempel-Typ
+        function getStampType() {
+            return stampTypeGegen.checked ? 'gegenrechnung' : 'geprueft';
+        }
 
         // ============================================================
         // Datum auf heute setzen
@@ -438,19 +518,23 @@
         const mm = String(today.getMonth() + 1).padStart(2, '0');
         const yyyy = today.getFullYear();
         datumInput.value = `${yyyy}-${mm}-${dd}`;
-        previewDate.textContent = `${dd}.${mm}.${yyyy}`;
+        previewDate.textContent     = `${dd}.${mm}.${yyyy}`;
+        previewDateGegen.textContent = `${dd}.${mm}.${yyyy}`;
 
         // ============================================================
         // Live-Vorschau aktualisieren
         // ============================================================
         prueferInput.addEventListener('input', () => {
             previewName.textContent = prueferInput.value || ' ';
+            previewNameGegen.textContent = prueferInput.value || ' ';
         });
 
         datumInput.addEventListener('change', () => {
             const parts = datumInput.value.split('-');
             if (parts.length === 3) {
-                previewDate.textContent = `${parts[2]}.${parts[1]}.${parts[0]}`;
+                const formatted = `${parts[2]}.${parts[1]}.${parts[0]}`;
+                previewDate.textContent = formatted;
+                previewDateGegen.textContent = formatted;
             }
         });
 
@@ -563,6 +647,7 @@
                 const prueferName = prueferInput.value;
                 const datumParts  = datumInput.value.split('-');
                 const datumText   = `${datumParts[2]}.${datumParts[1]}.${datumParts[0]}`;
+                const stampType   = getStampType(); // 'geprueft' | 'gegenrechnung'
 
                 // Eingabe für zu überspringende Seiten parsen
                 const skipPagesSet = new Set();
@@ -632,20 +717,32 @@
                     // --- Rahmen ---
                     const borderWidth  = 1.5;  // Rahmenbreite (in pt)
 
-                    // --- Textzeilen ---
-                    const line1 = 'GEPRÜFT';
-                    const line2 = prueferName;
-                    const line3 = datumText;
+                    // --- Textzeilen je nach Stempel-Typ ---
+                    let lines; // Array von { text, size }
+                    if (stampType === 'gegenrechnung') {
+                        lines = [
+                            { text: 'durch Gegenrechnung', size: fontSizeTitle },
+                            { text: 'Gepr\u00fcft',              size: fontSizeTitle },
+                            { text: prueferName,             size: fontSizeName  },
+                            { text: datumText,               size: fontSizeDate  },
+                        ];
+                    } else {
+                        lines = [
+                            { text: 'GEPR\u00dcFT',   size: fontSizeTitle },
+                            { text: prueferName, size: fontSizeName  },
+                            { text: datumText,   size: fontSizeDate  },
+                        ];
+                    }
 
                     // --- Breiten berechnen ---
-                    const w1 = font.widthOfTextAtSize(line1, fontSizeTitle);
-                    const w2 = font.widthOfTextAtSize(line2, fontSizeName);
-                    const w3 = font.widthOfTextAtSize(line3, fontSizeDate);
-                    const textWidth = Math.max(w1, w2, w3);
+                    const lineWidths = lines.map(l => font.widthOfTextAtSize(l.text, l.size));
+                    const textWidth  = Math.max(...lineWidths);
 
                     // --- Stempel-Dimensionen ---
+                    const totalTextHeight = lines.reduce((acc, l) => acc + l.size, 0)
+                                         + lineSpacing * (lines.length - 1);
                     const stampWidth  = textWidth + paddingX * 2;
-                    const stampHeight = fontSizeTitle + fontSizeName + fontSizeDate + lineSpacing * 2 + paddingY * 2;
+                    const stampHeight = totalTextHeight + paddingY * 2;
 
                     // --- Position: unten rechts ---
                     const stampX = width - stampWidth - marginRight;
@@ -663,45 +760,28 @@
                         height: stampHeight,
                         borderColor: stampColor,
                         borderWidth: borderWidth,
-                        opacity: 0,           // Kein Füll-Hintergrund
+                        opacity: 0,
                         borderOpacity: stampOpacity,
                     });
 
-                    // Zeile 1: "GEPRÜFT" (zentriert)
-                    const line1X = stampX + (stampWidth - w1) / 2;
-                    const line1Y = stampY + stampHeight - paddingY - fontSizeTitle;
-                    page.drawText(line1, {
-                        x: line1X,
-                        y: line1Y,
-                        size: fontSizeTitle,
-                        font: font,
-                        color: stampColor,
-                        opacity: stampOpacity,
-                    });
-
-                    // Zeile 2: Prüfername (zentriert)
-                    const line2X = stampX + (stampWidth - w2) / 2;
-                    const line2Y = line1Y - fontSizeName - lineSpacing;
-                    page.drawText(line2, {
-                        x: line2X,
-                        y: line2Y,
-                        size: fontSizeName,
-                        font: font,
-                        color: stampColor,
-                        opacity: stampOpacity,
-                    });
-
-                    // Zeile 3: Datum (zentriert)
-                    const line3X = stampX + (stampWidth - w3) / 2;
-                    const line3Y = line2Y - fontSizeDate - lineSpacing;
-                    page.drawText(line3, {
-                        x: line3X,
-                        y: line3Y,
-                        size: fontSizeDate,
-                        font: font,
-                        color: stampColor,
-                        opacity: stampOpacity,
-                    });
+                    // Textzeilen von oben nach unten zeichnen
+                    let currentY = stampY + stampHeight - paddingY - lines[0].size;
+                    for (let li = 0; li < lines.length; li++) {
+                        const ln = lines[li];
+                        const lw = lineWidths[li];
+                        const lx = stampX + (stampWidth - lw) / 2;
+                        page.drawText(ln.text, {
+                            x: lx,
+                            y: currentY,
+                            size: ln.size,
+                            font: font,
+                            color: stampColor,
+                            opacity: stampOpacity,
+                        });
+                        if (li < lines.length - 1) {
+                            currentY -= lines[li + 1].size + lineSpacing;
+                        }
+                    }
 
                     // Fortschrittsbalken aktualisieren
                     const progress = 30 + Math.round((i + 1) / totalPages * 60);
@@ -725,9 +805,10 @@
                 progressBar.style.width = '100%';
                 progressText.textContent = `✓ Fertig – ${totalPages} Seite(n) gestempelt!`;
 
-                // Dateiname: [Ursprungsname]_geprueft.pdf
+                // Dateiname: [Ursprungsname]_geprueft.pdf / _gegenrechnung.pdf
                 const originalName = currentFile.name.replace(/\.pdf$/i, '');
-                const downloadName = `${originalName}_geprueft.pdf`;
+                const suffix = stampType === 'gegenrechnung' ? '_gegenrechnung_geprueft' : '_geprueft';
+                const downloadName = `${originalName}${suffix}.pdf`;
 
                 // Download triggern
                 const blob = new Blob([pdfBytes], { type: 'application/pdf' });
