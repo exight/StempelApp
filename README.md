@@ -53,7 +53,7 @@ Moderne, einseitige Webanwendung (SPA) für Bauingenieure und Statiker, mit der 
 - **Datenbank:** Keine
 - **Docker-Netzwerke:** proxy
 - **Homelab-Abhängigkeiten:** Traefik
-- **Externe Schnittstellen:** Keine (Zero-Dependency-Build, HTML/JS/CSS ausgeliefert via Nginx)
+- **Externe Schnittstellen:** Keine serverseitigen; der Browser lädt Tailwind CSS (`cdn.tailwindcss.com`) und pdf-lib 1.17.1 (`unpkg.com`) per CDN
 
 ## 5. 💾 Speicherpfade & Persistenz
 
@@ -99,8 +99,8 @@ docker compose logs -f
 # Service neu starten
 docker compose restart
 
-# Image aktualisieren und Container neu erstellen
-docker compose pull
+# Image neu bauen (lokales Dockerfile, aktuelles nginx:alpine) und Container neu erstellen
+docker compose build --pull
 docker compose up -d
 ```
 

@@ -1,6 +1,6 @@
 # Standard Operating Procedures (SOP) – Stempelapp
 
-> **Operations Runbook für Stempelapp Arbeitszeiterfassung**
+> **Operations Runbook für die Statik-Prüfstempel App (statische PDF-Stempel-SPA)**
 
 Verbindliche Standardarbeitsanweisungen für den initialen Rollout, Routine-Betrieb, die Datensicherung, Notfallwiederherstellung (Disaster Recovery), Störungsbehebung (Incident Management) und planmäßige Wartung im Homelab.
 
@@ -11,7 +11,7 @@ Verbindliche Standardarbeitsanweisungen für den initialen Rollout, Routine-Betr
 | Attribut | Wert |
 | :--- | :--- |
 | **Geltungsbereich** | Stempelapp (https://pruefstempel.wuppt.de) |
-| **Systemkomponenten** | stempelapp, PostgreSQL (stempelapp db), Traefik |
+| **Systemkomponenten** | digitaler-stempel (lokal gebautes nginx:alpine-Image mit `index.html`), Traefik |
 | **Verantwortlich** | Homelab-Administrator / Coding-Agents |
 | **DRP-Klassifizierung** | **Tier 2: Business & Personal Data** |
 | **Zugehörige Dokumente** | [`stempelapp/README.md`](file:///home/flo/container/stempelapp/README.md), [`disaster_recovery.md`](file:///home/flo/container/disaster_recovery.md), [`best_practices.md`](file:///home/flo/container/best_practices.md), [`AGENTS.md`](file:///home/flo/container/AGENTS.md) |
@@ -32,62 +32,59 @@ Verbindliche Standardarbeitsanweisungen für den initialen Rollout, Routine-Betr
 ## SOP-01: Deployment, Start-Routine & Initial-Setup
 
 ### Ziel & Vorbedingungen
-Deployment der Arbeitszeiterfassungs-Anwendung mit PostgreSQL-Backend und Traefik-Routing.
+Deployment der statischen Prüfstempel-SPA (Nginx, read-only) mit Traefik-Routing. Keine Datenbank, keine `.env`.
 
 ### Schritt-für-Schritt Rollout
 ```bash
 cd /home/flo/container/stempelapp
-# 1. Umgebungsdatei prüfen (DB_HOST, DB_NAME, DB_PASSWORD)
-test -f .env || cp .env.example .env
-# 2. Prüfen, ob die PostgreSQL-Datenbank 'stempelapp' existiert
-docker exec postgres pg_isready -U postgres
-# 3. Container starten
+# 1. Image aus Dockerfile bauen (nginx:alpine + index.html)
+docker compose build --pull
+# 2. Container starten
 docker compose up -d
-# 4. Startup-Logs prüfen
+# 3. Startup-Logs prüfen
 docker compose logs -f --tail=30
 ```
 
 ### Besondere Setup-Hinweise
-- Erreichbar unter `https://pruefstempel.wuppt.de` auf Port 80.
-- Verbindet sich intern über das Netzwerk 'database' mit PostgreSQL.
-- Eigene Benutzer- und Zeiterfassungslogik.
+- Erreichbar unter `https://pruefstempel.wuppt.de` (Nginx intern auf Port 80).
+- Nur im Netzwerk `proxy`; keine Datenbank-Anbindung.
+- Die PDF-Verarbeitung erfolgt vollständig clientseitig im Browser (pdf-lib).
 
 ---
 
 ## SOP-02: Routine-Betrieb, Healthcheck & Monitoring
 
 ### Ziel
-Überwachung der Erreichbarkeit, Zeiterfassungs-Buchungen und Datenbank-Verbindungen.
+Überwachung der Erreichbarkeit der statischen Webanwendung.
 
 ### Tägliche & Wöchentliche Prüfschritte
 ```bash
 docker compose ps
 curl -kfsSL -o /dev/null -w "HTTP: %{http_code}\n" https://pruefstempel.wuppt.de
-docker compose logs --tail=30 | grep -iE 'error|exception'
+docker compose logs --tail=30 | grep -iE 'error|emerg|crit'
 ```
 
 ### Überwachung & Metriken
 - HTTP Status 200
-- Stempel-Buchungen (Kommen/Gehen) werden sofort quittiert
-- PostgreSQL-Verbindung stabil
+- Docker-Healthcheck (`wget http://127.0.0.1/`) meldet `healthy`
+- PDF lässt sich im Browser stempeln und herunterladen
 
 ---
 
 ## SOP-03: Backup & Datensicherung
 
 ### DRP-Einstufung: **Tier 2: Business & Personal Data**
-- **Maximaler Datenverlust (RPO):** `< 24 Stunden (täglich um 00:00 Uhr)`
+- **Maximaler Datenverlust (RPO):** `0 (zustandslos, vollständig in Git versioniert)`
 - **Maximale Ausfallzeit (RTO):** `< 1 Stunde`
 
 ### Backup-Verfahren
-- Tägliches logisches Backup der PostgreSQL-Datenbank `stempelapp` via Databasus.
-- Sicherung der `.env` im Passwort-Tresor.
+- Keine Nutzdaten auf dem Server; PDFs verlassen nie den Browser.
+- `Dockerfile`, `index.html` und `docker-compose.yml` sind in Git versioniert.
 
 ### Manuelle Sicherungsbefehle
 ```bash
-# Ad-hoc Backup der Stempelapp-Datenbank
-docker exec -i postgres pg_dump -U postgres -Fc stempelapp > /tmp/stempelapp_backup_$(date +%F_%H%M%S).dump
-ls -lh /tmp/stempelapp_backup_*.dump
+# Git-Status prüfen
+git status -s /home/flo/container/stempelapp
 ```
 
 ---
@@ -95,41 +92,37 @@ ls -lh /tmp/stempelapp_backup_*.dump
 ## SOP-04: Disaster Recovery & Restore-Verfahren
 
 ### Ziel
-Wiederherstellung des vollständigen Dienstes und aller Nutzdaten nach Datenverlust, Host-Neuinstallation oder Hardware-Defekt.
+Wiederherstellung des Dienstes nach Container-Defekt, Host-Neuinstallation oder Hardware-Defekt.
 
 ### Notfall-Runbook (Schritt-für-Schritt)
 ```bash
+cd /home/flo/container/stempelapp
 # 1. Container stoppen
 docker compose down
-# 2. Datenbank aus Databasus wiederherstellen
-RESTORE_FILE=$(ls -t /data/backup/homelab/databases/backups/stempelapp*.dump 2>/dev/null | head -n1)
-docker exec -i postgres dropdb -U postgres --if-exists stempelapp
-docker exec -i postgres createdb -U postgres stempelapp
-docker exec -i postgres pg_restore -U postgres -d stempelapp "$RESTORE_FILE"
-# 3. Container starten
-docker compose up -d
-# 4. Prüfen
+# 2. Image neu bauen und Container starten
+docker compose up -d --build
+# 3. Prüfen
 docker compose logs -f --tail=30
 ```
 
 ### Verifikationskriterien nach dem Restore
 - [ ] Webseite https://pruefstempel.wuppt.de lädt einwandfrei
-- [ ] Arbeitszeitbuchungen und Benutzerprofile sind vorhanden
-- [ ] Neue Buchung lässt sich fehlerfrei speichern
+- [ ] Test-PDF lässt sich hochladen (lokal), stempeln und herunterladen
 
 ---
 
 ## SOP-05: Incident Management & Störungsbehebung
 
-### Störfall: Datenbank-Verbindung unterbrochen / HTTP 500
-**Symptome:** Anwendung wirft HTTP 500 beim Speichern von Stempelzeiten.
+### Störfall: Stempeln funktioniert nicht / leere Seite
+**Symptome:** Seite lädt ohne Styling oder der Stempel-Button reagiert nicht.
 
 **Diagnose & Behebung:**
 ```bash
-# 1. Verbindung von stempelapp zu postgres prüfen
-docker network inspect database | grep stempelapp
-# 2. PostgreSQL Logs prüfen
-docker logs postgres --tail=50
+# 1. Container-Status und Healthcheck prüfen
+docker compose ps
+# 2. Erreichbarkeit der CDN-Abhängigkeiten (Tailwind, pdf-lib) aus dem Client prüfen
+curl -fsSI https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js | head -n1
+curl -fsSI https://cdn.tailwindcss.com | head -n1
 # 3. Container neu starten
 docker compose restart
 ```
@@ -140,11 +133,10 @@ docker compose restart
 
 ### Planmäßige Aktualisierung
 ```bash
-docker compose pull
+docker compose build --pull
 docker compose up -d
 docker image prune -f
 ```
 
 ### Housekeeping & Bereinigung
-- Jährlicher Export von Arbeitszeitnachweisen für Archivierungszwecke.
-
+- Anpassungen an Stempel-Layout, Farben oder Deckkraft erfolgen in `index.html` (danach neu bauen).
