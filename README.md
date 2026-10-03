@@ -1,47 +1,109 @@
 # 🏛️ Statik-Prüfstempel App
 
-Eine moderne, einseitige Webanwendung (Single-Page Application) für Bauingenieure und Statiker, mit der sich PDF-Dokumente einfach und sicher mit einem digitalen "GEPRÜFT"-Stempel versehen lassen.
+> **Clientseitige Single-Page Web-App für digitale PDF-Prüfstempel**
 
-![Stempel-Vorschau](https://img.shields.io/badge/Status-Einsatzbereit-success?style=for-the-badge)
-![Datenschutz](https://img.shields.io/badge/Datenschutz-100%25_Lokal-blue?style=for-the-badge)
+Moderne, einseitige Webanwendung (SPA) für Bauingenieure und Statiker, mit der sich PDF-Dokumente einfach und sicher mit einem digitalen 'GEPRÜFT'-Stempel versehen lassen. Die gesamte PDF-Modifikation geschieht zu 100% lokal im Browser des Nutzers via pdf-lib – es werden keine Dokumente hochgeladen.
 
-## ✨ Funktionen und Merkmale
+---
 
-*   **🔒 100% Datenschutz (Serverless):** Die gesamte PDF-Generierung passiert zwingend lokal im Client (Browser). Es werden *niemals* PDF-Daten an einen externen Server gesendet oder hochgeladen.
-*   **🖼️ Intuitive UI:** Modernes "Glassmorphismus"-Design mit dunklem Theme, interner Live-Vorschau und einem Drag-&-Drop Upload-Feld für schnelle Bedienbarkeit.
-*   **🖋️ Flexibler Prüfstempel:** 
-    *   Der Prüfername kann über ein freies Textfeld dynamisch eingetragen werden.
-    *   Datum ist automatisch auf heute gesetzt, aber einfach anpassbar.
-    *   Platziert automatisch auf jeder Seite des Dokuments (Unten Rechts).
-    *   **Wasserzeichen-Effekt:** Der Stempel (dunkelgrün) ist leicht transparent (`75% Opacity`). Das sorgt dafür, dass Bauzeichnungen und berechnete Werte unter dem Stempel weiterhin lesbar bleiben!
-*   **⚡ Keine Abhängigkeiten (Zero-Build-Process):** Reines HTML5, Vanilla JS und Tailwind via CDN.
+## 1. 📌 Architektur & Container-Konfiguration
 
-## 🚀 Installation & Lokale Ausführung
+- **Kategorie (Homepage):** `Productivity & Tools`
+- **Betriebsstatus:** `Produktiv aktiv`
+- **DRP-Klassifizierung:** **Tier 4 (Statisch / Zustandslos)** (siehe [Disaster Recovery Plan](file:///home/flo/container/disaster_recovery.md))
 
-### Option A: Einfach im Browser öffnen (Manuell)
-Da die App ohne ein Backend auskommt, reicht es theoretisch schon aus, die `index.html` Datei einfach per Doppelklick in einem Webbrowser (z.B. Chrome, Firefox oder Edge) zu öffnen.
+### Container-Übersicht
 
-### Option B: Bereitstellung per Docker Compose (Empfohlen)
-Um die Applikation als richtigen Webservice z.B. im Firmennetzwerk bereitzustellen, liegt ein `docker-compose.yml` bereit. Dieses baut das Image automatisch und startet den Server.
+| Container | Image | Ressourcen-Limits | Netzwerke | Externe Ports |
+| :--- | :--- | :--- | :--- | :--- |
+| `digitaler-stempel` | `Lokal gebaut (Dockerfile via nginx:alpine)` | CPU: 0.25 / RAM: 64M | `proxy` | Keine (Traefik-only) |
 
-1. **Starten via Docker Compose:**
-   In dem Verzeichnis ausführen:
-   ```bash
-   docker compose up -d --build
-   ```
+## 2. 🌐 Erreichbarkeit & Routing (Traefik)
 
-2. Die Applikation ist nun über Deinen Browser erreichbar unter:
-   👉 **`http://localhost:8080`**
+- **Primäre Web-Adresse:** [https://pruefstempel.wuppt.de](https://pruefstempel.wuppt.de)
 
-*(Um den Dienst wieder zu stoppen, einfach `docker compose down` ausführen)*
+### Traefik Reverse-Proxy Ingress
 
-## 🛠️ Anpassungen für Entwickler
+| Parameter | Konfiguration / Wert |
+| :--- | :--- |
+| **Router-Name** | `stempel` |
+| **Routing-Regel (Rule)** | `Host(`pruefstempel.wuppt.de`)` |
+| **EntryPoints** | `https` (Port 443 mit automatischer HTTPS-Erzwingung) |
+| **TLS-Zertifikat** | `cloudflare` (Wildcard `*.wuppt.de` via DNS-01 Challenge) |
+| **Interner Service-Port** | `80` |
+| **Aktive Middlewares** | Keine (Direkte Weiterleitung) |
 
-Das Design und die Stempel-Eigenschaften können einfach im `<script>` oder `<style>` Bereich der `index.html` manipuliert werden.
-*   **Stempel-Position & Styles:** Ab ca. Zeile `570` im JavaScript findest Du klar deklarierte Konstanten (z.B. `stampOpacity = 0.75;`, `marginBottom = 20;`), an denen Du die Stempelgröße, Farbe, Transparenz und Position millimetergenau justieren kannst.
+## 3. 🔐 Authentifizierung & Zugriffskontrolle
 
-## 📚 Verwendeter Tech-Stack
+- **Authentifizierungs-Methode:** **Öffentlich / Clientseitig isoliert (Zero-Knowledge)**
+- **Sicherheitskonzept & Funktionsweise:**
+  Die Anwendung ist öffentlich erreichbar. Da PDFs niemals an den Server übertragen werden, sondern clientseitig im WebAssembly/JavaScript-ArrayBuffer verarbeitet werden, ist absoluter Datenschutz für vertrauliche Baupläne garantiert.
+- **Ausnahmen & API-Freigaben:**
+  Kein vorgeschaltetes Proxy-Gateway erforderlich.
 
-*   **HTML5 / Vanilla JS**: Kernlogik
-*   **Tailwind CSS (CDN)**: Styling
-*   **pdf-lib (CDN)**: Die Engine für das clientseitige, sichere Lesen, Modifizieren und Speichern der PDF-Datei direkt im ArrayBuffer des Browsers.
+### Container-Hardening & Least-Privilege
+- **Container `digitaler-stempel`:**
+  - No-New-Privileges: Aktiviert (`no-new-privileges:true`)
+  - Read-Only Root-FS: Aktiviert (`read_only: true`)
+  - Linux Capabilities: `CHOWN, SETUID, SETGID, NET_BIND_SERVICE`
+  - Prozess-Benutzer: `nginx`
+
+## 4. 🔗 Abhängigkeiten & Systemintegration
+
+- **Datenbank:** Keine
+- **Docker-Netzwerke:** proxy
+- **Homelab-Abhängigkeiten:** Traefik
+- **Externe Schnittstellen:** Keine (Zero-Dependency-Build, HTML/JS/CSS ausgeliefert via Nginx)
+
+## 5. 💾 Speicherpfade & Persistenz
+
+| Host-Pfad | Container-Pfad | Modus | Inhalt / Zweck | Datensicherung |
+| :--- | :--- | :--- | :--- | :--- |
+
+## 6. ⚙️ Besonderheiten & Spezifische Konfiguration
+
+- **Container-Hardening:** `read_only: true` mit `tmpfs: [/var/cache/nginx, /var/run, /tmp]`, `cap_drop: [ALL]`.
+- **Wasserzeichen-Effekt:** Der Stempel ist mit 75% Deckkraft leicht transparent, damit Zahlen und Planinhalte darunter lesbar bleiben.
+
+## 7. 🛡️ Backup & Disaster Recovery (DRP)
+
+- **Klassifizierung:** **Tier 4 (Statisch / Zustandslos)** nach [`disaster_recovery.md`](file:///home/flo/container/disaster_recovery.md)
+- **Recovery Time Objective (RTO):** `< 5 Minuten`
+- **Recovery Point Objective (RPO):** `0 Minuten`
+- **Datenbank-Sicherung (Databasus):** Nicht zutreffend
+- **Dateisystem-Sicherung (Backrest):** In Git versioniert
+- **Wiederherstellungsprozess:**
+  Neustart bzw. Rebuild via Docker Compose.
+
+## 8. 📊 Dashboard & Monitoring
+
+- **Homepage Dashboard:**
+  - **Kategorie:** `Productivity & Tools`
+  - **Icon:** `mdi-stamp`
+  - **Verlinkung:** [https://pruefstempel.wuppt.de](https://pruefstempel.wuppt.de)
+- **Uptime Kuma:** HTTP-Endpunkt-Check auf [https://pruefstempel.wuppt.de](https://pruefstempel.wuppt.de)
+- **Metriken & Logging:** Healthcheck `wget -qO /dev/null http://127.0.0.1/` alle 30s
+
+## 9. 🚀 Betrieb & Wartung
+
+```bash
+# In das Projektverzeichnis wechseln
+cd /home/flo/container/stempelapp
+
+# Status & Healthcheck der Container prüfen
+docker compose ps
+
+# Live-Logs verfolgen
+docker compose logs -f
+
+# Service neu starten
+docker compose restart
+
+# Image aktualisieren und Container neu erstellen
+docker compose pull
+docker compose up -d
+```
+
+### Spezifische Wartungshinweise
+- Stempel-Position und Farben können direkt in `index.html` angepasst werden.
+
